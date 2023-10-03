@@ -5,6 +5,7 @@ string[] STATUSES =   {"Open", "Reopened", "Resolved", "Closed" };
 string[] PRIORITIES = {"Low", "Medium", "High", "Urgent", "Emergency"};
 
 string readWriteFilePath = "Tickets.csv";
+
 int lineNumTracker = 0;
 
 string optionsSelector(string[] options){
