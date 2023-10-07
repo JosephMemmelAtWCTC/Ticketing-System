@@ -2,6 +2,10 @@
 
 const string DELIMETER_1 = ",";
 const string DELIMETER_2 = "|";
+const string START_END_TITLE_WITH_DELIMETER1_INDICATOR = "\"";
+
+const bool REMOVE_DUPLICATES = true;
+const int PRINTOUT_RESULTS_MAX_TERMINAL_SPACE_HEIGHT = 1_000; //Tested, >~ 1,000 line before removal, use int.MaxValue for infinity, int's length is max for used lists
 
 
 UInt64 lastId = 0;//Should never be negative, but not uint for allowing -1 for error checking
@@ -17,10 +21,12 @@ NLog.Logger logger = LogManager.Setup().LoadConfigurationFromFile(loggerPath).Ge
 
 logger.Info("Main program is running and log mager is started, program is running on a " + (IS_UNIX ? "" : "non-") + "unix-based device.");
 
-// string[] MAIN_MENU_OPTIONS_IN_ORDER = { enumToStringMainMenuWorkArround(MAIN_MENU_OPTIONS.View_Movies_No_Filter),
-//                                         enumToStringMainMenuWorkArround(MAIN_MENU_OPTIONS.View_Movies_Filter),
-//                                         enumToStringMainMenuWorkArround(MAIN_MENU_OPTIONS.Add_Movies),
-//                                         enumToStringMainMenuWorkArround(MAIN_MENU_OPTIONS.Exit)};
+List<int> ticketsTitleYearHash = new List<int>();//Store data hashes for speed, stored centrally. TODO: Move out if needed
+
+string[] MAIN_MENU_OPTIONS_IN_ORDER = { enumToStringMainMenuWorkArround(MAIN_MENU_OPTIONS.View_Tickets_No_Filter),
+                                        enumToStringMainMenuWorkArround(MAIN_MENU_OPTIONS.View_Tickets_Filter),
+                                        enumToStringMainMenuWorkArround(MAIN_MENU_OPTIONS.Add_Tickets),
+                                        enumToStringMainMenuWorkArround(MAIN_MENU_OPTIONS.Exit)};
 
 
 string[] TICKET_STATUSES_IN_ORDER = {Ticket.StatusesEnumToString(Ticket.STATUSES.OPEN),
@@ -82,8 +88,8 @@ string optionsSelector(string[] options)
     return options[cleanedListIndexs[selectedNumber - 1]];
 }
 
+List<Ticket> tickets = buildTicketListFromFile(readWriteFilePath);
 
-Console.WriteLine("Welcome to the 'Ticketing System', please wait while we set things up for you...");
 
 // Attempt to open file
 if(System.IO.File.Exists(readWriteFilePath)){
@@ -94,36 +100,29 @@ if(System.IO.File.Exists(readWriteFilePath)){
         lineNumTracker++;
     }
     sr.Close();
-    Console.WriteLine("There are ({0}) tickets on file.", lineNumTracker);
+    Console.WriteLine($"There are ({lineNumTracker}) tickets on file.");
     do{
-        Console.WriteLine("---Options---");
-        Console.WriteLine(" 1) Enter new ticket");
-        Console.WriteLine(" 2) View all tickets");
-        Console.Write("Please enter your choice or 'q' to quit: ");
+        // TODO: Move to switch with integer of place value and also make not relient on index by switching to enum for efficiency
+        string menuCheckCommand = optionsSelector(MAIN_MENU_OPTIONS_IN_ORDER);
 
-        string userInput = Console.ReadLine();
-        if(userInput.Length == 0){
-            userInput=" ";
+        if (menuCheckCommand == enumToStringMainMenuWorkArround(MAIN_MENU_OPTIONS.Exit))
+        {//If user intends to exit the program
+            logger.Info("Program quiting...");
+            return;
         }
-        char selectChar = userInput[0];
-        selectChar = Char.ToUpper(selectChar);
-    
-        switch (selectChar)
+        else if (menuCheckCommand == enumToStringMainMenuWorkArround(MAIN_MENU_OPTIONS.View_Tickets_No_Filter))
         {
-            case '1':
-                string addLine = createTicketLine();
-                StreamWriter sw = new StreamWriter(readWriteFilePath, true);
-                sw.WriteLine(addLine);
-                sw.Close();
-            break;
-            case '2':
-                printTicketList();
-            break;
-            case 'Q':
-                return;
-            default:
-                Console.WriteLine("Sorry but '"+selectChar+"' is not a valid option. Please try again.");
-            break;
+            // presentListRange(movies);
+            printTicketList();
+        }
+        else if (menuCheckCommand == enumToStringMainMenuWorkArround(MAIN_MENU_OPTIONS.View_Tickets_Filter))
+        {
+            string addLine = createTicketLine();
+            StreamWriter sw = new StreamWriter(readWriteFilePath, true);
+        }
+        else
+        {
+            logger.Fatal("Somehow, menuCheckCommand was slected that did not fall under the the existing commands, this should never have been triggered. Improper menuCheckCommand is getting through");
         }
 
     }while(true);
@@ -131,7 +130,7 @@ if(System.IO.File.Exists(readWriteFilePath)){
 
 
 }else{
-    Console.WriteLine("The file, '{0}' was not found.", readWriteFilePath);
+    Console.WriteLine($"The file, '{readWriteFilePath}' was not found.");
 }
 
 void printTicketList(){
@@ -173,6 +172,7 @@ void printTicketList(){
 }
 
 string createTicketLine(){
+
     // Place in order of {TicketID, Summary, Status, Priority, Submitter, Assigned, Watching}
     Console.WriteLine("Creating a new ticket...");
     string addLine = (++lineNumTracker)+DELIMETER_1;
@@ -202,27 +202,149 @@ string createTicketLine(){
 }
 
 
+List<Ticket> buildTicketListFromFile(string dataPath)
+{
+    List<Ticket> ticketsInFile = new List<Ticket>();
+
+    // Info for tracking
+    uint lineNumber = 1;//Should never be negative, so uint
+
+    // ALL TERMINATORS
+    if (!System.IO.File.Exists(dataPath))
+    {
+        logger.Fatal($"The file, '{dataPath}' was not found.");
+        // throw new FileNotFoundException();
+        return null;
+    }
+    // Take care of the rest of at this point all unknown filesystem errors (not accessable, ect.)
+    StreamReader sr;
+    try
+    {
+        sr = new StreamReader(dataPath);
+    }
+    catch (Exception ex)
+    {
+        logger.Fatal(ex.Message);
+        // throw new Exception($"Problem using file at \"{dataPath}\"");
+        return null;
+    }
+
+    while (!sr.EndOfStream)
+    {
+        bool recordIsBroken = true;
+        string line = sr.ReadLine();
+        // string[] ticketParts = line.Substring(0, line.IndexOf(DELIMETER_1));
+        string[] ticketParts = line.Split(DELIMETER_1);
+        if (ticketParts.Length > 3 && (line.Substring(line.IndexOf(DELIMETER_1)).Split(START_END_TITLE_WITH_DELIMETER1_INDICATOR).Length - 1 >= 2))
+        {//Assume first that quotation marks are used to lower
+            ushort indexOfFirstDelimeter1 = (ushort)(line.IndexOf(DELIMETER_1) + 1);//Can be ushort as line above makes sure cannot be -1
+            ushort indexOfLastDelimeter1 = (ushort)line.Substring(indexOfFirstDelimeter1).LastIndexOf(DELIMETER_1);//Can be ushort as line above makes sure cannot be -1
+            ticketParts[1] = line.Substring(indexOfFirstDelimeter1, indexOfLastDelimeter1).Replace(START_END_TITLE_WITH_DELIMETER1_INDICATOR, "");
+            ticketParts[2] = ticketParts[ticketParts.Length - 1];//Get last element that was split using delimeter #1
+            ticketParts = new string[] { ticketParts[0], ticketParts[1], ticketParts[2] };
+        }
+
+        if (ticketParts.Length <= 2)
+        {
+            logger.Error($"Broken ticket record on line #{lineNumber} (\"{line}\"). Not enough arguments provided on line. Must have a id, a title, and optionally genres.");
+        }
+        else if (ticketParts.Length > 3)
+        {
+            logger.Error("ticketParts=" + ticketParts.Length + $"Broken ticket record on line #{lineNumber} (\"{line}\"). Too many arguments provided on line. Must have a id, a title, and optionally genres.");
+        }
+        else
+        {
+            recordIsBroken = false;
+        }
+        if (!UInt64.TryParse(ticketParts[0], out UInt64 ticketId))
+        {
+            logger.Error($"Broken ticket record on line #{lineNumber} (\"{line}\"). Ticket id is not a integer. Ticket id must be a integer.");
+            recordIsBroken = true;
+        }
+        string ticketTitle = "";
+        if (!recordIsBroken)
+        {
+            ticketTitle = ticketParts[1];
+            if (ticketTitle.Length == 0 || ticketTitle == " ")
+            {
+                logger.Error($"Broken ticket record on line #{lineNumber} (\"{line}\"). Ticket title is empty. Ticket title cannot be blank or empty. !!!!!" + ticketTitle + "!!!!!");
+                recordIsBroken = true;
+            }
+        }
+
+        if (!recordIsBroken)
+        {
+            string genres = ticketParts[2];
+            Ticket ticket = new Ticket(ticketId, ticketTitle, genres, DELIMETER_2);
+            if (REMOVE_DUPLICATES)
+            {
+                //Check hashtable for existing combination and add
+                int ticketTitleYearHash = ticket.GetHashCode();
+                if (ticketsTitleYearHash.Contains(ticketTitleYearHash))
+                {
+                    logger.Warn($"Dupliate ticket record on ticket \"{ticket.Title.Replace("\"", "")}\" with id \"{ticket.Id}\". Not including in results.");//TODO: Update line
+                }
+                else
+                {
+                    ticketsInFile.Add(ticket);
+                    ticketsTitleYearHash.Add(ticketTitleYearHash);
+                }
+            }
+            else
+            {
+                ticketsInFile.Add(ticket);
+            }
+
+            // Console.WriteLine(ticket);
+        }
+
+        // Update helpers
+        lineNumber++;
+        lastId = Math.Max(lastId, ticketId);
+    }
+    sr.Close();
+    return ticketsInFile;
+}
+
+
 // vvv UNUM STUFF vvv
 
-// string enumToStringMainMenuWorkArround(MAIN_MENU_OPTIONS mainMenuEnum)
-// {
-//     return mainMenuEnum switch
-//     {
-//         MAIN_MENU_OPTIONS.Exit => "Quit program",
-//         MAIN_MENU_OPTIONS.View_Movies_No_Filter => $"View movies on file in order (display max ammount is {PRINTOUT_RESULTS_MAX_TERMINAL_SPACE_HEIGHT:N0})",
-//         MAIN_MENU_OPTIONS.View_Movies_Filter => $"Filter movies on file",
-//         MAIN_MENU_OPTIONS.Add_Movies => "Add movies to file",
-//         _ => "ERROR"
-//     };
-// }
-// string Ticket.GetEnumStatusFromString(FILTER_MENU_OPTIONS filterMenuEnum)
-// {
-//     return filterMenuEnum switch
-//     {
-//         FILTER_MENU_OPTIONS.Exit => "Quit Filtering",
-//         FILTER_MENU_OPTIONS.Year => "By year",
-//         FILTER_MENU_OPTIONS.Title => "By title",
-//         FILTER_MENU_OPTIONS.Genre => "By genre",
-//         _ => "ERROR"
-//     };
-// }
+string enumToStringMainMenuWorkArround(MAIN_MENU_OPTIONS mainMenuEnum)
+{
+    return mainMenuEnum switch
+    {
+        MAIN_MENU_OPTIONS.Exit => "Quit program",
+        MAIN_MENU_OPTIONS.View_Tickets_No_Filter => $"View movies on file in order (display max ammount is {PRINTOUT_RESULTS_MAX_TERMINAL_SPACE_HEIGHT:N0})",
+        MAIN_MENU_OPTIONS.View_Tickets_Filter => $"Filter tickets on file",
+        MAIN_MENU_OPTIONS.Add_Tickets => "Add ticket to file",
+        _ => "ERROR"
+    };
+}
+string enumToStringFilterMenuWorkArround(FILTER_MENU_OPTIONS filterMenuEnum)
+{
+    return filterMenuEnum switch
+    {
+        FILTER_MENU_OPTIONS.Exit => "Quit Filtering",
+        FILTER_MENU_OPTIONS.Year => "By year",
+        FILTER_MENU_OPTIONS.Title => "By title",
+        FILTER_MENU_OPTIONS.Genre => "By genre",
+        _ => "ERROR"
+    };
+}
+
+public enum MAIN_MENU_OPTIONS
+{
+    Exit,
+    View_Tickets_No_Filter,
+    View_Tickets_Filter,
+    Add_Tickets
+}
+
+public enum FILTER_MENU_OPTIONS
+{
+    Exit,
+    Year,
+    Title,
+    Genre
+    // Id
+}
