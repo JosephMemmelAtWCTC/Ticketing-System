@@ -25,15 +25,14 @@ List<int> ticketsTitleYearHash = new List<int>();//Store data hashes for speed, 
 
 string[] MAIN_MENU_OPTIONS_IN_ORDER = { enumToStringMainMenuWorkArround(MAIN_MENU_OPTIONS.View_Tickets_No_Filter),
                                         enumToStringMainMenuWorkArround(MAIN_MENU_OPTIONS.View_Tickets_Filter),
-                                        enumToStringMainMenuWorkArround(MAIN_MENU_OPTIONS.Add_Tickets),
+                                        enumToStringMainMenuWorkArround(MAIN_MENU_OPTIONS.Add_Ticket),
                                         enumToStringMainMenuWorkArround(MAIN_MENU_OPTIONS.Exit)};
-
 
 string[] TICKET_STATUSES_IN_ORDER = {Ticket.StatusesEnumToString(Ticket.STATUSES.OPEN),
                                      Ticket.StatusesEnumToString(Ticket.STATUSES.REOPENDED),
                                      Ticket.StatusesEnumToString(Ticket.STATUSES.RESOLVED),
                                      Ticket.StatusesEnumToString(Ticket.STATUSES.CLOSED)};
-                                     
+
 string[] TICKET_PRIORITIES_IN_ORDER = {Ticket.PrioritiesEnumToString(Ticket.PRIORITIES.LOW),
                                        Ticket.PrioritiesEnumToString(Ticket.PRIORITIES.MEDIUM),
                                        Ticket.PrioritiesEnumToString(Ticket.PRIORITIES.HIGH),
@@ -100,7 +99,7 @@ if(System.IO.File.Exists(readWriteFilePath)){
         lineNumTracker++;
     }
     sr.Close();
-    Console.WriteLine($"There are ({lineNumTracker}) tickets on file.");
+    Console.WriteLine($"There are ({lineNumTracker}) ticket{(lineNumTracker==1 ? "":"s")} on file.");
     do{
         // TODO: Move to switch with integer of place value and also make not relient on index by switching to enum for efficiency
         string menuCheckCommand = optionsSelector(MAIN_MENU_OPTIONS_IN_ORDER);
@@ -112,13 +111,20 @@ if(System.IO.File.Exists(readWriteFilePath)){
         }
         else if (menuCheckCommand == enumToStringMainMenuWorkArround(MAIN_MENU_OPTIONS.View_Tickets_No_Filter))
         {
-            // presentListRange(movies);
+            // presentListRange(tickets);
             printTicketList();
         }
         else if (menuCheckCommand == enumToStringMainMenuWorkArround(MAIN_MENU_OPTIONS.View_Tickets_Filter))
         {
-            string addLine = createTicketLine();
-            StreamWriter sw = new StreamWriter(readWriteFilePath, true);
+
+        }
+        else if (menuCheckCommand == enumToStringMainMenuWorkArround(MAIN_MENU_OPTIONS.Add_Ticket))
+        {
+            Ticket newTicket = createNewTicket();
+            // StreamWriter sw = new StreamWriter(readWriteFilePath, true);
+
+            // Inform user that ticket was created and added    
+
         }
         else
         {
@@ -199,6 +205,92 @@ string createTicketLine(){
     }while(true);
     addLine = addLine.Substring(0,addLine.Length-1); //Removes last (an extra) DELIMETER_2
     return addLine;
+}
+
+
+Ticket createNewTicket(){
+    string userInputRaw;
+    UInt64 userChoosenInteger;
+
+    // Ticket title
+    string ticketTitle;
+    bool ticketTitleFailed = true;
+    do
+    {
+        Console.Write("Please enter the title of the new ticket: ");
+        userInputRaw = Console.ReadLine().Trim();
+        ticketTitle = userInputRaw.Trim();
+        if (ticketTitle.Length == 0)
+        {
+            logger.Error("Ticket title cannot be left blank, please try again.");
+        }
+        else
+        {
+            ticketTitleFailed = false;
+        }
+
+        if (userInputRaw.Contains(","))
+        {
+            ticketTitle = $"\"{userInputRaw}\"";
+        }
+    } while (ticketTitleFailed);
+
+    UInt64 newId = lastId + 1; //Assume last record id is not out of order, avoid using auto id for placing with repeat id's that may have existed before but then were removed. Option avaiable if manually entering id.
+    do
+    {
+        Console.Write($"To use ticket id \"{newId}\", leave blank, else enter integer now: ");
+        userInputRaw = Console.ReadLine().Trim();
+        if (UInt64.TryParse(userInputRaw, out userChoosenInteger) || userInputRaw.Length == 0) //Duplicate .Length == 0 checking to have code in the same location
+        {
+            if (userInputRaw.Length == 0 || userChoosenInteger == newId)
+            { //Skip check if using auto id, manually typed or by entering blank
+                userChoosenInteger = newId;
+                lastId++;//Increment last id
+            }
+            else if (userChoosenInteger <= 0)
+            {
+                logger.Error("Your choosen id choice was not a positive integer above 0, please try again.");
+                userChoosenInteger = 0;
+            }
+            else
+            {
+                // TODO: Make more efficent
+                foreach (Ticket ticket in tickets) // Check if id is already used
+                {
+                    if (ticket.Id == userChoosenInteger)
+                    {
+                        logger.Error("Your choosen id is already in use, please try again.");
+                        userChoosenInteger = 0;
+                    }
+                }
+            }
+        }
+        else
+        {
+            //User response was not a integer
+            logger.Error("Your choosen id choice was not a integer, please try again.");
+            userChoosenInteger = 0; //Was not an integer
+        }
+    } while (userChoosenInteger == 0);
+
+    Ticket.STATUSES selectedStatus = Ticket.GetEnumStatusFromString(optionsSelector(TICKET_STATUSES_IN_ORDER));
+    Ticket.PRIORITIES selectedPriority = Ticket.GetEnumPriorityFromString(optionsSelector(TICKET_PRIORITIES_IN_ORDER));
+
+
+    UInt64 ticketId = userChoosenInteger;
+
+    //Write the record
+    // TODO: ensue no errors with SW!
+    if (ticketTitle.EndsWith("\""))
+    {//Merge year with title (some exisiting records do not have a year, but going forward, all should so it's included here)
+        ticketTitle = $"{ticketTitle.Substring(0, ticketTitle.Length - 2)}";
+    }
+    else
+    {
+        ticketTitle = $"{ticketTitle}";
+    }
+    
+    return new Ticket(ticketId, ticketTitle, selectedStatus, selectedPriority);
 }
 
 
@@ -314,9 +406,9 @@ string enumToStringMainMenuWorkArround(MAIN_MENU_OPTIONS mainMenuEnum)
     return mainMenuEnum switch
     {
         MAIN_MENU_OPTIONS.Exit => "Quit program",
-        MAIN_MENU_OPTIONS.View_Tickets_No_Filter => $"View movies on file in order (display max ammount is {PRINTOUT_RESULTS_MAX_TERMINAL_SPACE_HEIGHT:N0})",
+        MAIN_MENU_OPTIONS.View_Tickets_No_Filter => $"View tickets on file in order (display max ammount is {PRINTOUT_RESULTS_MAX_TERMINAL_SPACE_HEIGHT:N0})",
         MAIN_MENU_OPTIONS.View_Tickets_Filter => $"Filter tickets on file",
-        MAIN_MENU_OPTIONS.Add_Tickets => "Add ticket to file",
+        MAIN_MENU_OPTIONS.Add_Ticket => "Add ticket to file",
         _ => "ERROR"
     };
 }
@@ -337,7 +429,7 @@ public enum MAIN_MENU_OPTIONS
     Exit,
     View_Tickets_No_Filter,
     View_Tickets_Filter,
-    Add_Tickets
+    Add_Ticket
 }
 
 public enum FILTER_MENU_OPTIONS
