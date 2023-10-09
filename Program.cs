@@ -2,7 +2,7 @@
 
 const string DELIMETER_1 = ",";
 const string DELIMETER_2 = "|";
-const string START_END_TITLE_WITH_DELIMETER1_INDICATOR = "\"";
+const string START_END_SUMMARY_WITH_DELIMETER1_INDICATOR = "\"";
 
 const bool REMOVE_DUPLICATES = true;
 const int PRINTOUT_RESULTS_MAX_TERMINAL_SPACE_HEIGHT = 1_000; //Tested, >~ 1,000 line before removal, use int.MaxValue for infinity, int's length is max for used lists
@@ -21,7 +21,7 @@ NLog.Logger logger = LogManager.Setup().LoadConfigurationFromFile(loggerPath).Ge
 
 logger.Info("Main program is running and log mager is started, program is running on a " + (IS_UNIX ? "" : "non-") + "unix-based device.");
 
-List<int> ticketsTitleYearHash = new List<int>();//Store data hashes for speed, stored centrally. TODO: Move out if needed
+List<int> ticketHashes = new List<int>();//Store data hashes for speed, stored centrally. TODO: Move out if needed
 
 string[] MAIN_MENU_OPTIONS_IN_ORDER = { enumToStringMainMenuWorkArround(MAIN_MENU_OPTIONS.View_Tickets_No_Filter),
                                         enumToStringMainMenuWorkArround(MAIN_MENU_OPTIONS.View_Tickets_Filter),
@@ -45,7 +45,7 @@ string optionsSelector(string[] options)
     string userInput;
     int selectedNumber;
     bool userInputWasImproper = true;
-    List<int> cleanedListIndexs = new List<int> {};
+    List<int> cleanedListIndexs = new List<int> { };
     string optionsTextAsStr = ""; //So only created once. Requires change if adjustable width is added
 
     for (int i = 0; i < options.Length; i++)
@@ -87,20 +87,48 @@ string optionsSelector(string[] options)
     return options[cleanedListIndexs[selectedNumber - 1]];
 }
 
+string userCreatedStringObtainer(string message, int minimunCharactersAllowed, bool showMinimum, bool keepRaw){
+    if(minimunCharactersAllowed < 0){
+        minimunCharactersAllowed = 0;
+    }
+    string userInput = null;
+
+    do{
+        Console.Write($"\n{message}{(showMinimum?" (must contain at least {minimunCharactersAllowed} characters)":"")}: ");
+        userInput = Console.ReadLine().ToString();
+        if(!keepRaw){
+            userInput = userInput.Trim();
+        }
+        if(minimunCharactersAllowed > 0 && userInput.Length == 0){
+           userInput = null;
+            logger.Warn($"Entered input was blank, input not allowed to be empty, please try again.");
+        }else if(userInput.Length < minimunCharactersAllowed){
+            userInput = null;
+            logger.Warn($"Entered input was too short, it must be at least {minimunCharactersAllowed} characters long, please try again.");
+        }
+    }while(userInput == null);
+    
+    return userInput;
+}
+
+
 List<Ticket> tickets = buildTicketListFromFile(readWriteFilePath);
 
 
 // Attempt to open file
-if(System.IO.File.Exists(readWriteFilePath)){
+if (System.IO.File.Exists(readWriteFilePath))
+{
     StreamReader sr = new StreamReader(readWriteFilePath);
-    while (!sr.EndOfStream){
+    while (!sr.EndOfStream)
+    {
         string line = sr.ReadLine();
         // TODO: Count priorties?
         lineNumTracker++;
     }
     sr.Close();
-    Console.WriteLine($"There are ({lineNumTracker}) ticket{(lineNumTracker==1 ? "":"s")} on file.");
-    do{
+    Console.WriteLine($"There are ({lineNumTracker}) ticket{(lineNumTracker == 1 ? "" : "s")} on file.");
+    do
+    {
         // TODO: Move to switch with integer of place value and also make not relient on index by switching to enum for efficiency
         string menuCheckCommand = optionsSelector(MAIN_MENU_OPTIONS_IN_ORDER);
 
@@ -112,7 +140,7 @@ if(System.IO.File.Exists(readWriteFilePath)){
         else if (menuCheckCommand == enumToStringMainMenuWorkArround(MAIN_MENU_OPTIONS.View_Tickets_No_Filter))
         {
             // presentListRange(tickets);
-            printTicketList();
+            printTicketList(tickets);
         }
         else if (menuCheckCommand == enumToStringMainMenuWorkArround(MAIN_MENU_OPTIONS.View_Tickets_Filter))
         {
@@ -121,9 +149,17 @@ if(System.IO.File.Exists(readWriteFilePath)){
         else if (menuCheckCommand == enumToStringMainMenuWorkArround(MAIN_MENU_OPTIONS.Add_Ticket))
         {
             Ticket newTicket = createNewTicket();
+            if (!REMOVE_DUPLICATES || checkTicketIsNotDuplicate(ticketHashes, newTicket))
+            {
+                attemptToSaveTicket(newTicket);
+            }
+            else
+            {
+                logger.Warn($"Dupliate ticket summary record on ticket \"{newTicket.Summary}\" with id \"{newTicket.Id}\". Not adding to records.");
+            }
             // StreamWriter sw = new StreamWriter(readWriteFilePath, true);
 
-            // Inform user that ticket was created and added    
+            //TODO: Inform user that ticket was created and added    
 
         }
         else
@@ -131,109 +167,87 @@ if(System.IO.File.Exists(readWriteFilePath)){
             logger.Fatal("Somehow, menuCheckCommand was slected that did not fall under the the existing commands, this should never have been triggered. Improper menuCheckCommand is getting through");
         }
 
-    }while(true);
-// 1,This is a bug ticket,Open,High,Drew Kjell,Jane Doe, Drew Kjell|John Smith|Bill Jones
+    } while (true);
+    // 1,This is a bug ticket,Open,High,Drew Kjell,Jane Doe, Drew Kjell|John Smith|Bill Jones
 
 
-}else{
+}
+else
+{
     Console.WriteLine($"The file, '{readWriteFilePath}' was not found.");
 }
 
-void printTicketList(){
-    if(System.IO.File.Exists(readWriteFilePath)){
-        Console.WriteLine("+----------+--------+----------+--------------------+--------------------+----------------------------------------+--------------------------------------------+");
-        Console.WriteLine("| TicketID | Status | Priority |     Submitter      |      Asigned       |              Watching                  |                  Summary                   |");
-        Console.WriteLine("+----------+--------+----------+--------------------+--------------------+----------------------------------------+--------------------------------------------+");
-        StreamReader sr = new StreamReader(readWriteFilePath);
-        
-        while (!sr.EndOfStream){
-            string line = sr.ReadLine();
-            string[] elements = line.Split(DELIMETER_1);
-            if(elements.Length == 6){ //There was not watcher asigned
-                elements[6] = "";
-            }
-            string ticketID, summary, status, priority, submitter, asigned, watching;
-            ticketID = elements[0];
-            summary = elements[1];
-            status = elements[2];
-            priority = elements[3];
-            submitter = elements[4];
-            asigned = elements[5];
-            watching = elements[6];
-            Console.WriteLine("| "+
-                String.Format("{0, -9}",ticketID)+"|"+
-                String.Format("{0, -8}",status)+"|"+
-                String.Format("{0, -9}",priority)+" |"+
-                String.Format("{0, -20}",submitter)+"|"+
-                String.Format("{0, -20}",asigned)+"|"+
-                String.Format("{0, -40}",watching.Replace(DELIMETER_2,", "))+"|"+
-                String.Format("{0, -44}",summary)+"|"
-            );
-        }
-        Console.WriteLine("+----------+--------+----------+--------------------+--------------------+----------------------------------------+--------------------------------------------+");
-        sr.Close();
-    }else{
-        Console.WriteLine("The file, '{0}' was not found.", readWriteFilePath);
+void printTicketList(List<Ticket> displayTickets)
+{
+    Console.WriteLine("+----------+--------+----------+--------------------+--------------------+----------------------------------------+--------------------------------------------+");
+    Console.WriteLine("| TicketID | Status | Priority |     Submitter      |      Asigned       |              Watching                  |                  Summary                   |");
+    Console.WriteLine("+----------+--------+----------+--------------------+--------------------+----------------------------------------+--------------------------------------------+");
+    StreamReader sr = new StreamReader(readWriteFilePath);
+
+    foreach (Ticket ticket in displayTickets)
+    {
+        string ticketId, summary, status, priority, submitter, asigned, watching;
+        ticketId = ticket.Id.ToString();
+        summary = ticket.Summary;
+        status = Ticket.StatusesEnumToString(ticket.Status);
+        priority = Ticket.PrioritiesEnumToString(ticket.Priority);
+        submitter = ticket.Submitter;
+        asigned = ticket.Asigned;
+        watching = ticket.Watching.Aggregate((current, next) => current + ", " + next);
+        Console.WriteLine("| " +
+            String.Format("{0, -9}", ticketId) + "|" +
+            String.Format("{0, -8}", status) + "|" +
+            String.Format("{0, -9}", priority) + " |" +
+            String.Format("{0, -20}", submitter) + "|" +
+            String.Format("{0, -20}", asigned) + "|" +
+            String.Format("{0, -40}", watching) + "|" +
+            String.Format("{0, -44}", summary) + "|"
+        );
     }
+
+    Console.WriteLine("+----------+--------+----------+--------------------+--------------------+----------------------------------------+--------------------------------------------+");
 }
 
-string createTicketLine(){
+string createTicketLine()
+{
 
     // Place in order of {TicketID, Summary, Status, Priority, Submitter, Assigned, Watching}
     Console.WriteLine("Creating a new ticket...");
-    string addLine = (++lineNumTracker)+DELIMETER_1;
+    string addLine = (++lineNumTracker) + DELIMETER_1;
     Console.Write(" Enter a summary of the ticket: ");
-    addLine += Console.ReadLine()+DELIMETER_1;
+    addLine += Console.ReadLine() + DELIMETER_1;
     Console.WriteLine(" Select the status of the ticket ");
-    addLine += optionsSelector(TICKET_STATUSES_IN_ORDER)+DELIMETER_1;
+    addLine += optionsSelector(TICKET_STATUSES_IN_ORDER) + DELIMETER_1;
     Console.WriteLine(" Select the priority of the ticket ");
-    addLine += optionsSelector(TICKET_PRIORITIES_IN_ORDER)+DELIMETER_1;
+    addLine += optionsSelector(TICKET_PRIORITIES_IN_ORDER) + DELIMETER_1;
     Console.Write(" Enter the submitter of the ticket: ");
     string nameInput = Console.ReadLine();//TODO: Move to format name method and handle extra cases
-    if(nameInput.Length > 0){ nameInput = Char.ToUpper(nameInput[0])+nameInput.Substring(1); }
-    addLine += nameInput+DELIMETER_1;
+    if (nameInput.Length > 0) { nameInput = Char.ToUpper(nameInput[0]) + nameInput.Substring(1); }
+    addLine += nameInput + DELIMETER_1;
     Console.Write(" Enter the person assigned to the ticket: ");
     nameInput = Console.ReadLine();
-    if(nameInput.Length > 0){ nameInput = Char.ToUpper(nameInput[0])+nameInput.Substring(1); }
-    addLine += nameInput+DELIMETER_1;
-    do{
+    if (nameInput.Length > 0) { nameInput = Char.ToUpper(nameInput[0]) + nameInput.Substring(1); }
+    addLine += nameInput + DELIMETER_1;
+    do
+    {
         Console.Write(" Enter the name of a person watching the ticket or leave blank to compleate the ticket: ");
         nameInput = Console.ReadLine();
-        if(nameInput.Length == 0){ break; }
-        nameInput = Char.ToUpper(nameInput[0])+nameInput.Substring(1);
-        addLine += nameInput+DELIMETER_2;
-    }while(true);
-    addLine = addLine.Substring(0,addLine.Length-1); //Removes last (an extra) DELIMETER_2
+        if (nameInput.Length == 0) { break; }
+        nameInput = Char.ToUpper(nameInput[0]) + nameInput.Substring(1);
+        addLine += nameInput + DELIMETER_2;
+    } while (true);
+    addLine = addLine.Substring(0, addLine.Length - 1); //Removes last (an extra) DELIMETER_2
     return addLine;
 }
 
 
-Ticket createNewTicket(){
+Ticket createNewTicket()
+{
     string userInputRaw;
     UInt64 userChoosenInteger;
 
-    // Ticket title
-    string ticketTitle;
-    bool ticketTitleFailed = true;
-    do
-    {
-        Console.Write("Please enter the title of the new ticket: ");
-        userInputRaw = Console.ReadLine().Trim();
-        ticketTitle = userInputRaw.Trim();
-        if (ticketTitle.Length == 0)
-        {
-            logger.Error("Ticket title cannot be left blank, please try again.");
-        }
-        else
-        {
-            ticketTitleFailed = false;
-        }
-
-        if (userInputRaw.Contains(","))
-        {
-            ticketTitle = $"\"{userInputRaw}\"";
-        }
-    } while (ticketTitleFailed);
+    // Ticket summary
+    string ticketSummary = userCreatedStringObtainer("Please enter the summary of the new ticket", 5, true, false);
 
     UInt64 newId = lastId + 1; //Assume last record id is not out of order, avoid using auto id for placing with repeat id's that may have existed before but then were removed. Option avaiable if manually entering id.
     do
@@ -273,26 +287,27 @@ Ticket createNewTicket(){
         }
     } while (userChoosenInteger == 0);
 
+    UInt64 ticketId = userChoosenInteger;
     Ticket.STATUSES selectedStatus = Ticket.GetEnumStatusFromString(optionsSelector(TICKET_STATUSES_IN_ORDER));
     Ticket.PRIORITIES selectedPriority = Ticket.GetEnumPriorityFromString(optionsSelector(TICKET_PRIORITIES_IN_ORDER));
-
-
-    UInt64 ticketId = userChoosenInteger;
-
-    //Write the record
-    // TODO: ensue no errors with SW!
-    if (ticketTitle.EndsWith("\""))
-    {//Merge year with title (some exisiting records do not have a year, but going forward, all should so it's included here)
-        ticketTitle = $"{ticketTitle.Substring(0, ticketTitle.Length - 2)}";
-    }
-    else
-    {
-        ticketTitle = $"{ticketTitle}";
-    }
+    string selectedSubmitter = userCreatedStringObtainer("Please enter the name of this ticket's submitter", 1, true, false);
+    string selectedAssigned = userCreatedStringObtainer("Enter the person assigned to the ticket", 1, true, false);
+    List<string> selectedWatchers = new List<string>(){ };
+    do{
+        selectedWatchers.Add(userCreatedStringObtainer("Enter the name of a person watching the ticket or leave blank to compleate the ticket", 0, true, true));
+    }while(selectedWatchers.Last().Length != 0);
+    selectedWatchers.RemoveAt(selectedWatchers.Count()-1);
     
-    return new Ticket(ticketId, ticketTitle, selectedStatus, selectedPriority);
+
+    return new Ticket(ticketId, ticketSummary, selectedStatus, selectedPriority, selectedSubmitter, selectedAssigned, selectedWatchers.ToArray());
 }
 
+bool checkTicketIsNotDuplicate(List<int> checkAgainstHashes, Ticket checkTicket)
+{
+    //Check hashtable for existing combination and add
+    int ticketHash = checkTicket.GetHashCode();
+    return checkAgainstHashes.Contains(ticketHash);
+}
 
 List<Ticket> buildTicketListFromFile(string dataPath)
 {
@@ -324,25 +339,24 @@ List<Ticket> buildTicketListFromFile(string dataPath)
     while (!sr.EndOfStream)
     {
         bool recordIsBroken = true;
-        string line = sr.ReadLine();
-        // string[] ticketParts = line.Substring(0, line.IndexOf(DELIMETER_1));
+        string line = sr.ReadLine().Trim();
         string[] ticketParts = line.Split(DELIMETER_1);
-        if (ticketParts.Length > 3 && (line.Substring(line.IndexOf(DELIMETER_1)).Split(START_END_TITLE_WITH_DELIMETER1_INDICATOR).Length - 1 >= 2))
+        if (ticketParts.Length > 7 && (line.Substring(line.IndexOf(DELIMETER_1)).Split(START_END_SUMMARY_WITH_DELIMETER1_INDICATOR).Length - 1 >= 6))
         {//Assume first that quotation marks are used to lower
             ushort indexOfFirstDelimeter1 = (ushort)(line.IndexOf(DELIMETER_1) + 1);//Can be ushort as line above makes sure cannot be -1
             ushort indexOfLastDelimeter1 = (ushort)line.Substring(indexOfFirstDelimeter1).LastIndexOf(DELIMETER_1);//Can be ushort as line above makes sure cannot be -1
-            ticketParts[1] = line.Substring(indexOfFirstDelimeter1, indexOfLastDelimeter1).Replace(START_END_TITLE_WITH_DELIMETER1_INDICATOR, "");
-            ticketParts[2] = ticketParts[ticketParts.Length - 1];//Get last element that was split using delimeter #1
+            ticketParts[1] = line.Substring(indexOfFirstDelimeter1, indexOfLastDelimeter1).Replace(START_END_SUMMARY_WITH_DELIMETER1_INDICATOR, "");
+            ticketParts[6] = ticketParts[ticketParts.Length - 1];//Get last element that was split using delimeter #1
             ticketParts = new string[] { ticketParts[0], ticketParts[1], ticketParts[2] };
         }
 
         if (ticketParts.Length <= 2)
         {
-            logger.Error($"Broken ticket record on line #{lineNumber} (\"{line}\"). Not enough arguments provided on line. Must have a id, a title, and optionally genres.");
+            logger.Error($"Broken ticket record on line #{lineNumber} (\"{line}\"). Not enough arguments provided on line. Must have an id, a summary, a submitter, an asigned person and optionally watchers.");
         }
         else if (ticketParts.Length > 3)
         {
-            logger.Error("ticketParts=" + ticketParts.Length + $"Broken ticket record on line #{lineNumber} (\"{line}\"). Too many arguments provided on line. Must have a id, a title, and optionally genres.");
+            logger.Error("ticketParts=" + ticketParts.Length + $"Broken ticket record on line #{lineNumber} (\"{line}\"). Too many arguments provided on line. Must have a id, a summary, and optionally genres.");
         }
         else
         {
@@ -353,33 +367,42 @@ List<Ticket> buildTicketListFromFile(string dataPath)
             logger.Error($"Broken ticket record on line #{lineNumber} (\"{line}\"). Ticket id is not a integer. Ticket id must be a integer.");
             recordIsBroken = true;
         }
-        string ticketTitle = "";
+        string ticketSummary = "";
         if (!recordIsBroken)
         {
-            ticketTitle = ticketParts[1];
-            if (ticketTitle.Length == 0 || ticketTitle == " ")
+            ticketSummary = ticketParts[1].Trim();
+            if (ticketSummary.Length == 0 || ticketSummary == " ")
             {
-                logger.Error($"Broken ticket record on line #{lineNumber} (\"{line}\"). Ticket title is empty. Ticket title cannot be blank or empty. !!!!!" + ticketTitle + "!!!!!");
+                logger.Error($"Broken ticket record on line #{lineNumber} (\"{line}\"). Ticket summary is empty. Ticket summary cannot be blank or empty.");
+                recordIsBroken = true;
+            }
+        }
+        string ticketSubmitter = "";
+        if (!recordIsBroken)
+        {
+            ticketSubmitter = ticketParts[2].Trim();
+            if (ticketSummary.Length == 0 || ticketSummary == " ")
+            {
+                logger.Error($"Broken ticket record on line #{lineNumber} (\"{line}\"). Ticket summary is empty. Ticket summary cannot be blank or empty.");
                 recordIsBroken = true;
             }
         }
 
         if (!recordIsBroken)
         {
-            string genres = ticketParts[2];
-            Ticket ticket = new Ticket(ticketId, ticketTitle, genres, DELIMETER_2);
+            Ticket ticket = new Ticket(ticketId, ticketSummary, ticketStatus);
             if (REMOVE_DUPLICATES)
             {
                 //Check hashtable for existing combination and add
-                int ticketTitleYearHash = ticket.GetHashCode();
-                if (ticketsTitleYearHash.Contains(ticketTitleYearHash))
+                int ticketSummaryYearHash = ticket.GetHashCode();
+                if (ticketHashes.Contains(ticketSummaryYearHash))
                 {
-                    logger.Warn($"Dupliate ticket record on ticket \"{ticket.Title.Replace("\"", "")}\" with id \"{ticket.Id}\". Not including in results.");//TODO: Update line
+                    logger.Warn($"Dupliate ticket record on ticket \"{ticket.Summary.Replace("\"", "")}\" with id \"{ticket.Id}\". Not including in results.");//TODO: Update line
                 }
                 else
                 {
                     ticketsInFile.Add(ticket);
-                    ticketsTitleYearHash.Add(ticketTitleYearHash);
+                    ticketHashes.Add(ticketSummaryYearHash);
                 }
             }
             else
@@ -418,7 +441,7 @@ string enumToStringFilterMenuWorkArround(FILTER_MENU_OPTIONS filterMenuEnum)
     {
         FILTER_MENU_OPTIONS.Exit => "Quit Filtering",
         FILTER_MENU_OPTIONS.Year => "By year",
-        FILTER_MENU_OPTIONS.Title => "By title",
+        FILTER_MENU_OPTIONS.Summary => "By summary",
         FILTER_MENU_OPTIONS.Genre => "By genre",
         _ => "ERROR"
     };
@@ -436,7 +459,7 @@ public enum FILTER_MENU_OPTIONS
 {
     Exit,
     Year,
-    Title,
+    Summary,
     Genre
     // Id
 }
