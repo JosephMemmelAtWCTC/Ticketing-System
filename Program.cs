@@ -338,7 +338,7 @@ List<Ticket> buildTicketListFromFile(string dataPath)
 
     while (!sr.EndOfStream)
     {
-        bool recordIsBroken = true;
+        bool recordIsBroken = false;
         string line = sr.ReadLine().Trim();
         string[] ticketParts = line.Split(DELIMETER_1);
         if(ticketParts.Length > 7){ //More commas, need to merge inside summary, does not require quotation marks to seprate fields. Can change in future if requirements change
@@ -352,17 +352,15 @@ List<Ticket> buildTicketListFromFile(string dataPath)
         }
         Console.WriteLine("ticketParts = "+ticketParts.Aggregate((current, next) => current + " ][ " + next));
 
-        if (ticketParts.Length <= 7)
+        if (ticketParts.Length < 7)
         {
-            logger.Error($"Broken ticket record on line #{lineNumber} (\"{line}\"). Not enough arguments provided on line. Must have an id, a summary, a status, a priorty, a submitter, an asigned person and watchers.");
+            logger.Error($"Broken ticket record on line #{lineNumber} (\"{line}\"). Not enough arguments provided on line. Must have an id, a summary, a status, a priorty, a submitter, an asigned person and watcher(s).");
+            recordIsBroken = true;
         }
         else if (ticketParts.Length > 7)
         {
-            logger.Error("ticketParts=" + ticketParts.Length + $"Broken ticket record on line #{lineNumber} (\"{line}\"). Too many arguments provided on line. Must have an id, a summary, a status, a priorty, a submitter, an asigned person and watchers.");
-        }
-        else
-        {
-            recordIsBroken = false;
+            logger.Error("ticketParts=" + ticketParts.Length + $"Broken ticket record on line #{lineNumber} (\"{line}\"). Too many arguments provided on line. Must have an id, a summary, a status, a priorty, a submitter, an asigned person and watcher(s).");
+            recordIsBroken = true;
         }
         if (!UInt64.TryParse(ticketParts[0], out UInt64 ticketId))
         {
@@ -413,6 +411,8 @@ List<Ticket> buildTicketListFromFile(string dataPath)
             }
 
             // Console.WriteLine(ticket);
+        }else{
+            Console.WriteLine("FAILED!!!");
         }
 
         // Update helpers
