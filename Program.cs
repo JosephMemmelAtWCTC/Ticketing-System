@@ -87,27 +87,34 @@ string optionsSelector(string[] options)
     return options[cleanedListIndexs[selectedNumber - 1]];
 }
 
-string userCreatedStringObtainer(string message, int minimunCharactersAllowed, bool showMinimum, bool keepRaw){
-    if(minimunCharactersAllowed < 0){
+string userCreatedStringObtainer(string message, int minimunCharactersAllowed, bool showMinimum, bool keepRaw)
+{
+    if (minimunCharactersAllowed < 0)
+    {
         minimunCharactersAllowed = 0;
     }
     string userInput = null;
 
-    do{
-        Console.Write($"\n{message}{(showMinimum?$" (must contain at least {minimunCharactersAllowed} characters)":"")}: ");
+    do
+    {
+        Console.Write($"\n{message}{(showMinimum ? $" (must contain at least {minimunCharactersAllowed} character{(minimunCharactersAllowed==1?"":"s")})" : "")}: ");
         userInput = Console.ReadLine().ToString();
-        if(!keepRaw){
+        if (!keepRaw)
+        {
             userInput = userInput.Trim();
         }
-        if(minimunCharactersAllowed > 0 && userInput.Length == 0){
-           userInput = null;
+        if (minimunCharactersAllowed > 0 && userInput.Length == 0)
+        {
+            userInput = null;
             logger.Warn($"Entered input was blank, input not allowed to be empty, please try again.");
-        }else if(userInput.Length < minimunCharactersAllowed){
+        }
+        else if (userInput.Length < minimunCharactersAllowed)
+        {
             userInput = null;
             logger.Warn($"Entered input was too short, it must be at least {minimunCharactersAllowed} characters long, please try again.");
         }
-    }while(userInput == null);
-    
+    } while (userInput == null);
+
     return userInput;
 }
 
@@ -151,15 +158,20 @@ if (System.IO.File.Exists(readWriteFilePath))
             Ticket newTicket = createNewTicket();
             if (!REMOVE_DUPLICATES || checkTicketIsNotDuplicate(ticketHashes, newTicket))
             {
-                // attemptToSaveTicket(newTicket);@@@
+                if(attemptToSaveTicket(newTicket, readWriteFilePath))
+                {
+                    ticketHashes.Add(newTicket.GetHashCode());
+                    tickets.Add(newTicket);
+                    //Inform user that ticket was created and added    
+                    Console.WriteLine($"Your ticket with the summary of \"{newTicket.Summary}\" was successfully added to the records.");
+                }else{
+                    logger.Warn($"AAAAAA");
+                }
             }
             else
             {
-                logger.Warn($"Dupliate ticket summary record on ticket \"{newTicket.Summary}\" with id \"{newTicket.Id}\". Not adding to records.");
+                logger.Warn($"Duplicate ticket record on ticket \"{newTicket.Summary}\" with id \"{newTicket.Id}\". Not adding to records.");
             }
-            // StreamWriter sw = new StreamWriter(readWriteFilePath, true);
-
-            //TODO: Inform user that ticket was created and added    
 
         }
         else
@@ -192,7 +204,7 @@ void printTicketList(List<Ticket> displayTickets)
         status = Ticket.StatusesEnumToString(ticket.Status);
         priority = Ticket.PrioritiesEnumToString(ticket.Priority);
         submitter = ticket.Submitter;
-        asigned = ticket.Asigned;
+        asigned = ticket.Assigned;
         watching = ticket.Watching.Aggregate((current, next) => current + ", " + next);
         Console.WriteLine("| " +
             String.Format("{0, -9}", ticketId) + "|" +
@@ -208,36 +220,30 @@ void printTicketList(List<Ticket> displayTickets)
     Console.WriteLine("+----------+--------+----------+--------------------+--------------------+----------------------------------------+--------------------------------------------+");
 }
 
-string createTicketLine()
+bool attemptToSaveTicket(Ticket ticket, string filePath)
 {
-
-    // Place in order of {TicketID, Summary, Status, Priority, Submitter, Assigned, Watching}
-    Console.WriteLine("Creating a new ticket...");
-    string addLine = (++lineNumTracker) + DELIMETER_1;
-    Console.Write(" Enter a summary of the ticket: ");
-    addLine += Console.ReadLine() + DELIMETER_1;
-    Console.WriteLine(" Select the status of the ticket ");
-    addLine += optionsSelector(TICKET_STATUSES_IN_ORDER) + DELIMETER_1;
-    Console.WriteLine(" Select the priority of the ticket ");
-    addLine += optionsSelector(TICKET_PRIORITIES_IN_ORDER) + DELIMETER_1;
-    Console.Write(" Enter the submitter of the ticket: ");
-    string nameInput = Console.ReadLine();//TODO: Move to format name method and handle extra cases
-    if (nameInput.Length > 0) { nameInput = Char.ToUpper(nameInput[0]) + nameInput.Substring(1); }
-    addLine += nameInput + DELIMETER_1;
-    Console.Write(" Enter the person assigned to the ticket: ");
-    nameInput = Console.ReadLine();
-    if (nameInput.Length > 0) { nameInput = Char.ToUpper(nameInput[0]) + nameInput.Substring(1); }
-    addLine += nameInput + DELIMETER_1;
-    do
+    string generatedLine = "";
+    try
     {
-        Console.Write(" Enter the name of a person watching the ticket or leave blank to compleate the ticket: ");
-        nameInput = Console.ReadLine();
-        if (nameInput.Length == 0) { break; }
-        nameInput = Char.ToUpper(nameInput[0]) + nameInput.Substring(1);
-        addLine += nameInput + DELIMETER_2;
-    } while (true);
-    addLine = addLine.Substring(0, addLine.Length - 1); //Removes last (an extra) DELIMETER_2
-    return addLine;
+        StreamWriter sw = new StreamWriter(filePath, true);
+        // Place in order of {TicketID, Summary, Status, Priority, Submitter, Assigned, Watching}
+        generatedLine = $"{ticket.Id}{DELIMETER_1}{ticket.Summary}{DELIMETER_1}{Ticket.StatusesEnumToString(ticket.Status)}{DELIMETER_1}{Ticket.PrioritiesEnumToString(ticket.Priority)}{DELIMETER_1}{ticket.Submitter}{DELIMETER_1}{ticket.Assigned}{DELIMETER_1}{ticket.Watching.Aggregate((current, next) => $"{current}{DELIMETER_2}{next}")}";
+        sw.WriteLine(generatedLine);
+        sw.Close();
+        return true;
+    }
+    catch (FileNotFoundException ex)
+    {
+        logger.Fatal($"The file, '{filePath}' was not found, unable to save ticket.");
+    }
+    catch (Exception ex)
+    {
+        logger.Fatal(ex.Message);
+    }
+    if(generatedLine.Length > 0){
+        Console.WriteLine($"Unable to save the record to file but here is a line you can manualy add that should (still should be checked before adding) contains that records infromation and could be added manually.\n\n\"{generatedLine}\"\n");
+    }
+    return false;
 }
 
 
@@ -282,7 +288,7 @@ Ticket createNewTicket()
         else
         {
             //User response was not a integer
-            logger.Error("Your choosen id choice was not a integer, please try again.");
+            logger.Error("Your choosen id choice was not a possible integer, please try again.");
             userChoosenInteger = 0; //Was not an integer
         }
     } while (userChoosenInteger == 0);
@@ -292,12 +298,12 @@ Ticket createNewTicket()
     Ticket.PRIORITIES selectedPriority = Ticket.GetEnumPriorityFromString(optionsSelector(TICKET_PRIORITIES_IN_ORDER));
     string selectedSubmitter = userCreatedStringObtainer("Please enter the name of this ticket's submitter", 1, true, false);
     string selectedAssigned = userCreatedStringObtainer("Enter the person assigned to the ticket", 1, true, false);
-    List<string> selectedWatchers = new List<string>(){ };
-    do{
+    List<string> selectedWatchers = new List<string>() { };
+    do
+    {
         selectedWatchers.Add(userCreatedStringObtainer("Enter the name of a person watching the ticket or leave blank to compleate the ticket", 0, true, true));
-    }while(selectedWatchers.Last().Length != 0);
-    selectedWatchers.RemoveAt(selectedWatchers.Count()-1);
-    
+    } while (selectedWatchers.Last().Length != 0);
+    selectedWatchers.RemoveAt(selectedWatchers.Count() - 1);
 
     return new Ticket(ticketId, ticketSummary, selectedStatus, selectedPriority, selectedSubmitter, selectedAssigned, selectedWatchers.ToArray());
 }
@@ -306,7 +312,7 @@ bool checkTicketIsNotDuplicate(List<int> checkAgainstHashes, Ticket checkTicket)
 {
     //Check hashtable for existing combination and add
     int ticketHash = checkTicket.GetHashCode();
-    return checkAgainstHashes.Contains(ticketHash);
+    return !checkAgainstHashes.Contains(ticketHash);
 }
 
 List<Ticket> buildTicketListFromFile(string dataPath)
@@ -341,18 +347,17 @@ List<Ticket> buildTicketListFromFile(string dataPath)
         bool recordIsBroken = false;
         string line = sr.ReadLine().Trim();
         string[] ticketParts = line.Split(DELIMETER_1);
-        if(ticketParts.Length > 7){ //More commas, need to merge inside summary, does not require quotation marks to seprate fields. Can change in future if requirements change
-            string merged = ticketParts[1..(ticketParts.Length-5)].Aggregate((current, next) => $"{current}{DELIMETER_1}{next}"); //Put commas back in
+        if (ticketParts.Length > 7)
+        { //More commas, need to merge inside summary, does not require quotation marks to seprate fields. Can change in future if requirements change
+            string merged = ticketParts[1..(ticketParts.Length - 5)].Aggregate((current, next) => $"{current}{DELIMETER_1}{next}"); //Put commas back in
             ticketParts[1] = merged;
             short counter2 = 0;
-            for(int i = ticketParts.Length-5; i < ticketParts.Length; i++)
+            for (int i = ticketParts.Length - 5; i < ticketParts.Length; i++)
             {
-                ticketParts[2+counter2++] = ticketParts[i];
+                ticketParts[2 + counter2++] = ticketParts[i];
             }
             ticketParts = ticketParts[0..7];
-            Console.WriteLine(ticketParts.Aggregate((current, next) => $"{current}--{next}"));
         }
-        Console.WriteLine("ticketParts = "+ticketParts.Aggregate((current, next) => current + " ][ " + next));
 
         if (ticketParts.Length < 7)
         {
@@ -392,14 +397,14 @@ List<Ticket> buildTicketListFromFile(string dataPath)
 
         if (!recordIsBroken)
         {
-            Ticket ticket = new Ticket(ticketId, ticketSummary, ticketParts[2], ticketParts[3], ticketParts[4], ticketParts[5], new string[]{ticketParts[6]});
+            Ticket ticket = new Ticket(ticketId, ticketSummary, ticketParts[2], ticketParts[3], ticketParts[4], ticketParts[5], new string[] { ticketParts[6] });
             if (REMOVE_DUPLICATES)
             {
                 //Check hashtable for existing combination and add
                 int ticketSummaryHash = ticket.GetHashCode();
                 if (ticketHashes.Contains(ticketSummaryHash))
                 {
-                    logger.Warn($"Dupliate ticket record on ticket \"{ticket.Summary.Replace("\"", "")}\" with id \"{ticket.Id}\". Not including in results.");//TODO: Update line
+                    logger.Warn($"Duplicate ticket record on ticket \"{ticket.Summary.Replace("\"", "")}\" with id \"{ticket.Id}\". Not including in results.");//TODO: Update line
                 }
                 else
                 {
@@ -413,7 +418,9 @@ List<Ticket> buildTicketListFromFile(string dataPath)
             }
 
             // Console.WriteLine(ticket);
-        }else{
+        }
+        else
+        {
             Console.WriteLine("FAILED!!!");
         }
 
