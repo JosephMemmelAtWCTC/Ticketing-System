@@ -24,7 +24,7 @@ logger.Info("Main program is running and log mager is started, program is runnin
 List<int> ticketHashes = new List<int>();//Store data hashes for speed, stored centrally. TODO: Move out if needed
 
 string[] MAIN_MENU_OPTIONS_IN_ORDER = { enumToStringMainMenuWorkArround(MAIN_MENU_OPTIONS.View_Tickets_No_Filter),
-                                        enumToStringMainMenuWorkArround(MAIN_MENU_OPTIONS.View_Tickets_Filter),
+                                        // enumToStringMainMenuWorkArround(MAIN_MENU_OPTIONS.View_Tickets_Filter),
                                         enumToStringMainMenuWorkArround(MAIN_MENU_OPTIONS.Add_Ticket),
                                         enumToStringMainMenuWorkArround(MAIN_MENU_OPTIONS.Exit)};
 
@@ -149,10 +149,10 @@ if (System.IO.File.Exists(readWriteFilePath))
             // presentListRange(tickets);
             printTicketList(tickets);
         }
-        else if (menuCheckCommand == enumToStringMainMenuWorkArround(MAIN_MENU_OPTIONS.View_Tickets_Filter))
-        {
+        // else if (menuCheckCommand == enumToStringMainMenuWorkArround(MAIN_MENU_OPTIONS.View_Tickets_Filter))
+        // {
 
-        }
+        // }
         else if (menuCheckCommand == enumToStringMainMenuWorkArround(MAIN_MENU_OPTIONS.Add_Ticket))
         {
             Ticket newTicket = createNewTicket();
@@ -298,10 +298,10 @@ Ticket createNewTicket()
     Ticket.PRIORITIES selectedPriority = Ticket.GetEnumPriorityFromString(optionsSelector(TICKET_PRIORITIES_IN_ORDER));
     string selectedSubmitter = userCreatedStringObtainer("Please enter the name of this ticket's submitter", 1, true, false);
     string selectedAssigned = userCreatedStringObtainer("Enter the person assigned to the ticket", 1, true, false);
-    List<string> selectedWatchers = new List<string>() { };
+    List<string> selectedWatchers = new List<string>() {userCreatedStringObtainer("Enter the name of a person watching the ticket or leave blank to compleate the ticket", 1, true, false)};
     do
     {
-        selectedWatchers.Add(userCreatedStringObtainer("Enter the name of a person watching the ticket or leave blank to compleate the ticket", 0, true, true));
+        selectedWatchers.Add(userCreatedStringObtainer("Enter the name of another person watching the ticket or leave blank to compleate the ticket", 0, false, true));
     } while (selectedWatchers.Last().Length != 0);
     selectedWatchers.RemoveAt(selectedWatchers.Count() - 1);
 
@@ -404,7 +404,8 @@ List<Ticket> buildTicketListFromFile(string dataPath)
                 int ticketSummaryHash = ticket.GetHashCode();
                 if (ticketHashes.Contains(ticketSummaryHash))
                 {
-                    logger.Warn($"Duplicate ticket record on ticket \"{ticket.Summary.Replace("\"", "")}\" with id \"{ticket.Id}\". Not including in results.");//TODO: Update line
+                    logger.Warn($"Duplicate ticket record summary on ticket \"{ticket.Summary.Replace("\"", "")}\" with id \"{ticket.Id}\". Not including in results.");//TODO: Update line
+                    recordIsBroken = true;
                 }
                 else
                 {
@@ -440,7 +441,7 @@ string enumToStringMainMenuWorkArround(MAIN_MENU_OPTIONS mainMenuEnum)
     return mainMenuEnum switch
     {
         MAIN_MENU_OPTIONS.Exit => "Quit program",
-        MAIN_MENU_OPTIONS.View_Tickets_No_Filter => $"View tickets on file in order (display max ammount is {PRINTOUT_RESULTS_MAX_TERMINAL_SPACE_HEIGHT:N0})",
+        MAIN_MENU_OPTIONS.View_Tickets_No_Filter => $"View tickets on file in order", // Not quite needed yet. TODO: Finish implementing extra (display max ammount is {PRINTOUT_RESULTS_MAX_TERMINAL_SPACE_HEIGHT:N0})",
         MAIN_MENU_OPTIONS.View_Tickets_Filter => $"Filter tickets on file",
         MAIN_MENU_OPTIONS.Add_Ticket => "Add ticket to file",
         _ => "ERROR"
@@ -451,9 +452,8 @@ string enumToStringFilterMenuWorkArround(FILTER_MENU_OPTIONS filterMenuEnum)
     return filterMenuEnum switch
     {
         FILTER_MENU_OPTIONS.Exit => "Quit Filtering",
-        FILTER_MENU_OPTIONS.Year => "By year",
         FILTER_MENU_OPTIONS.Summary => "By summary",
-        FILTER_MENU_OPTIONS.Genre => "By genre",
+
         _ => "ERROR"
     };
 }
@@ -469,8 +469,11 @@ public enum MAIN_MENU_OPTIONS
 public enum FILTER_MENU_OPTIONS
 {
     Exit,
-    Year,
+    Id,
     Summary,
-    Genre
-    // Id
+    Status,
+    Priority,
+    Submitter,
+    Asigned,
+    Watcher
 }
