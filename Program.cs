@@ -94,7 +94,7 @@ string userCreatedStringObtainer(string message, int minimunCharactersAllowed, b
     string userInput = null;
 
     do{
-        Console.Write($"\n{message}{(showMinimum?" (must contain at least {minimunCharactersAllowed} characters)":"")}: ");
+        Console.Write($"\n{message}{(showMinimum?$" (must contain at least {minimunCharactersAllowed} characters)":"")}: ");
         userInput = Console.ReadLine().ToString();
         if(!keepRaw){
             userInput = userInput.Trim();
@@ -151,7 +151,7 @@ if (System.IO.File.Exists(readWriteFilePath))
             Ticket newTicket = createNewTicket();
             if (!REMOVE_DUPLICATES || checkTicketIsNotDuplicate(ticketHashes, newTicket))
             {
-                attemptToSaveTicket(newTicket);
+                // attemptToSaveTicket(newTicket);@@@
             }
             else
             {
@@ -341,22 +341,24 @@ List<Ticket> buildTicketListFromFile(string dataPath)
         bool recordIsBroken = true;
         string line = sr.ReadLine().Trim();
         string[] ticketParts = line.Split(DELIMETER_1);
-        if (ticketParts.Length > 7 && (line.Substring(line.IndexOf(DELIMETER_1)).Split(START_END_SUMMARY_WITH_DELIMETER1_INDICATOR).Length - 1 >= 6))
-        {//Assume first that quotation marks are used to lower
-            ushort indexOfFirstDelimeter1 = (ushort)(line.IndexOf(DELIMETER_1) + 1);//Can be ushort as line above makes sure cannot be -1
-            ushort indexOfLastDelimeter1 = (ushort)line.Substring(indexOfFirstDelimeter1).LastIndexOf(DELIMETER_1);//Can be ushort as line above makes sure cannot be -1
-            ticketParts[1] = line.Substring(indexOfFirstDelimeter1, indexOfLastDelimeter1).Replace(START_END_SUMMARY_WITH_DELIMETER1_INDICATOR, "");
-            ticketParts[6] = ticketParts[ticketParts.Length - 1];//Get last element that was split using delimeter #1
-            ticketParts = new string[] { ticketParts[0], ticketParts[1], ticketParts[2] };
+        if(ticketParts.Length > 7){ //More commas, need to merge inside summary, does not require quotation marks to seprate fields. Can change in future if requirements change
+            string merged = ticketParts[1..(ticketParts.Length-5)].Aggregate((current, next) => $"{current}{DELIMETER_1}{next}"); //Put commas back in
+            ticketParts[1] = merged;
+            short counter2 = 0;
+            for(int i = ticketParts.Length-4; i < ticketParts.Length; i++)
+            {
+                ticketParts[2+counter2++] = ticketParts[i];
+            }
         }
+        Console.WriteLine("ticketParts = "+ticketParts.Aggregate((current, next) => current + " ][ " + next));
 
-        if (ticketParts.Length <= 2)
+        if (ticketParts.Length <= 7)
         {
-            logger.Error($"Broken ticket record on line #{lineNumber} (\"{line}\"). Not enough arguments provided on line. Must have an id, a summary, a submitter, an asigned person and optionally watchers.");
+            logger.Error($"Broken ticket record on line #{lineNumber} (\"{line}\"). Not enough arguments provided on line. Must have an id, a summary, a status, a priorty, a submitter, an asigned person and watchers.");
         }
-        else if (ticketParts.Length > 3)
+        else if (ticketParts.Length > 7)
         {
-            logger.Error("ticketParts=" + ticketParts.Length + $"Broken ticket record on line #{lineNumber} (\"{line}\"). Too many arguments provided on line. Must have a id, a summary, and optionally genres.");
+            logger.Error("ticketParts=" + ticketParts.Length + $"Broken ticket record on line #{lineNumber} (\"{line}\"). Too many arguments provided on line. Must have an id, a summary, a status, a priorty, a submitter, an asigned person and watchers.");
         }
         else
         {
@@ -390,19 +392,19 @@ List<Ticket> buildTicketListFromFile(string dataPath)
 
         if (!recordIsBroken)
         {
-            Ticket ticket = new Ticket(ticketId, ticketSummary, ticketStatus);
+            Ticket ticket = new Ticket(ticketId, ticketSummary, ticketParts[2], ticketParts[3], ticketParts[4], ticketParts[5], new string[]{ticketParts[6]});
             if (REMOVE_DUPLICATES)
             {
                 //Check hashtable for existing combination and add
-                int ticketSummaryYearHash = ticket.GetHashCode();
-                if (ticketHashes.Contains(ticketSummaryYearHash))
+                int ticketSummaryHash = ticket.GetHashCode();
+                if (ticketHashes.Contains(ticketSummaryHash))
                 {
                     logger.Warn($"Dupliate ticket record on ticket \"{ticket.Summary.Replace("\"", "")}\" with id \"{ticket.Id}\". Not including in results.");//TODO: Update line
                 }
                 else
                 {
                     ticketsInFile.Add(ticket);
-                    ticketHashes.Add(ticketSummaryYearHash);
+                    ticketHashes.Add(ticketSummaryHash);
                 }
             }
             else
