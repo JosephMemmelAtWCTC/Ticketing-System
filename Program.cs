@@ -397,7 +397,7 @@ List<Ticket> buildTicketListFromFile(string dataPath)
 
         if (!recordIsBroken)
         {
-            Ticket ticket = new Ticket(ticketId, ticketSummary, ticketParts[2], ticketParts[3], ticketParts[4], ticketParts[5], new string[] { ticketParts[6] });
+            Ticket ticket = new Ticket(ticketId, ticketSummary, ticketParts[2], ticketParts[3], ticketParts[4], ticketParts[5], ticketParts[6].Split(DELIMETER_2));
             if (REMOVE_DUPLICATES)
             {
                 //Check hashtable for existing combination and add

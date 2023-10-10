@@ -5,3 +5,4 @@
 5,Operator error "ID10t",Reopened,Urgent,A. Person,J. Person,Nota. Person.
 6,Name attribution error,Reopened,Medium,Name Nameson,Name Nameson Jr.,Name Nameson Sr.
 7,A test with a comma, another comma, and another comma,Closed,Low,Admin,Admin,Admin
+8,Failure on Bob Node #0,Open,Emergency,Bob #3,Bob #40,Bob #1|Bob #40|Bob #3|Bob #64
