@@ -345,10 +345,12 @@ List<Ticket> buildTicketListFromFile(string dataPath)
             string merged = ticketParts[1..(ticketParts.Length-5)].Aggregate((current, next) => $"{current}{DELIMETER_1}{next}"); //Put commas back in
             ticketParts[1] = merged;
             short counter2 = 0;
-            for(int i = ticketParts.Length-4; i < ticketParts.Length; i++)
+            for(int i = ticketParts.Length-5; i < ticketParts.Length; i++)
             {
                 ticketParts[2+counter2++] = ticketParts[i];
             }
+            ticketParts = ticketParts[0..7];
+            Console.WriteLine(ticketParts.Aggregate((current, next) => $"{current}--{next}"));
         }
         Console.WriteLine("ticketParts = "+ticketParts.Aggregate((current, next) => current + " ][ " + next));
 
@@ -359,7 +361,7 @@ List<Ticket> buildTicketListFromFile(string dataPath)
         }
         else if (ticketParts.Length > 7)
         {
-            logger.Error("ticketParts=" + ticketParts.Length + $"Broken ticket record on line #{lineNumber} (\"{line}\"). Too many arguments provided on line. Must have an id, a summary, a status, a priorty, a submitter, an asigned person and watcher(s).");
+            logger.Error($"Broken ticket record on line #{lineNumber} (\"{line}\"). Too many arguments provided on line. Must have an id, a summary, a status, a priorty, a submitter, an asigned person and watcher(s).");
             recordIsBroken = true;
         }
         if (!UInt64.TryParse(ticketParts[0], out UInt64 ticketId))
